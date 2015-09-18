@@ -1,0 +1,1 @@
+﻿Get-WinEvent -LogName "Windows PowerShell" -ComputerName u05pc02 | select -first 9 | % { ([xml]$_.ToXml()).Event.EventData.Data[0] }
