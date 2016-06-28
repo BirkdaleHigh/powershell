@@ -13,16 +13,18 @@ function Convert-ADUserAccounts
     [CmdletBinding()]
     Param
     (
-        $Path = 'OU=2015 Student Intake,OU=Students,OU=Users,OU=BHS,DC=BHS,DC=INTERNAL'
-        ,$ProfilePath = "\\bhs-fs01\profile$\Students\2015 Students"
-        ,$HomeDirectory = "\\bhs-fs01\home$\Students\2015 Students\%USERNAME%"
+        $Path = 'OU=Year R CAC Computer Science 2012 Intake,OU=Students,OU=Users,OU=BHS,DC=BHS,DC=INTERNAL'
+        ,$ProfilePath = "\\bhs-fs01\profiles$\Students\2015 Students"
+        ,$HomeDirectory = "\\bhs-fs01\home$\Students\Year R Computing Controlled Assessment\%USERNAME%"
         ,$HomeDrive = "N"
         ,[parameter(ValueFromPipelineByPropertyName=$true)]
         $Surname
         ,[parameter(ValueFromPipelineByPropertyName=$true)]
         $Givenname
         ,[parameter(ValueFromPipelineByPropertyName=$true)]
-        $Description = "2015 Student"
+        $SamAccountName
+        ,[parameter(ValueFromPipelineByPropertyName=$true)]
+        $Description = "2015 Computing CA"
     )
 
     Begin
@@ -30,9 +32,14 @@ function Convert-ADUserAccounts
     }
     Process
     {
-        $Intake = "2015 Students";$ShortIntake = "15"
+        $Intake = "2015 Students";
+        $ShortIntake = "15"
         $Password = Get-Random -Minimum 1000 -Maximum 9999
-        $SamAccountName = $ShortIntake + $Surname + $Givenname[0]
+        if(-not $SamAccountName){
+            $SamAccountName = $ShortIntake + $Surname + $Givenname[0]
+        }
+
+        Write-Verbose $password
         
 
         $user = @{
@@ -43,12 +50,12 @@ function Convert-ADUserAccounts
             GivenName = $Givenname;
             Surname = $Surname;
             DisplayName = $SamAccountName;
-            EmailAddress = $SamAccountName + "@birkdalehigh.co.uk";
+            #EmailAddress = $SamAccountName + "@birkdalehigh.co.uk";
             Description = $Description;
             ProfilePath = $ProfilePath;
             HomeDirectory = $HomeDirectory;
             HomeDrive = $HomeDrive;
-            accountPassword = 'pass' + $Password;
+            accountPassword = ConvertTo-SecureString ('pass' + $Password) -AsPlainText -Force;
             ChangePasswordAtLogon = $true;
             enabled = $true;
         }
