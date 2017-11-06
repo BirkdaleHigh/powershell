@@ -9,47 +9,81 @@ Param(
     [switch]
     $test
 )
-$existingPrinters = (get-printer | where type -eq 'connection' | select -ExpandProperty name ) -join ', '
-$setup = measure-command {
-    if($computer){
-        $room = $Computer.remove(3).toUpper()
-    } else {
-        $room = ''
-    }
-    $map = Get-Content -Raw -Path "\\bhs-app01\Deployment\printer\valid-print-map" | convertfrom-json
+$computer = $computer.toUpper()
+$User = $User.toLower()
+
+if($computer.length -ge 3){
+    $room = $Computer.remove(3)
+} else {
+    $room = ''
 }
-$apply = measure-command {
-    $map.server | foreach {
+$map = Get-Content -Raw -Path "\\bhs-app01\Deployment\printer\valid-print-map" |
+    convertfrom-json
+$logpath = "\\bhs-app01\Deployment\printer\log\$Computer.log"
+Start-Transcript -path $logpath -append
+"Time: " + (get-date).datetime
+
+function printerList{
+    get-printer | where type -eq 'connection' | foreach {
+        "\\{0}\{1}" -f $_.computername, $_.ShareName
+    } | write-output
+}
+function filterPrinter{
+    [cmdletBinding()]
+    Param(
+        [parameter(valuefrompipeline,position=0)]
+        [pscustomobject[]]$printserver,
+        [string]$Room,
+        [string]$Computer,
+        [string]$User
+    )
+    begin{
+        $desiredPrinter = @()
+    }
+    Process{
+        $keys = $printserver | gm -MemberType noteproperty | select -ExpandProperty name | where {$_ -ne 'Name'}
+        # TODO: filter for computername and user
         $server = $_.name
-        $psitem.room | where name -eq $room | foreach {
-            $psitem.share | foreach {
-                if($test){
-                    "Room: \\$server\$($_.name)" | out-default
-                } else {
-                    add-printer -connectionName "\\$server\$($_.name)"
-                }
-            }
-        }
-        $psitem.computer | where name -eq $computer | foreach {
-            $psitem.share | foreach {
-                if($test){
-                    "Computer: \\$server\$($_.name)" | out-default
-                } else {
-                    add-printer -connectionName "\\$server\$($_.name)"
-                }
-            }
-        }
-        $psitem.user | where name -eq $user | foreach {
-            $psitem.share | foreach {
-                if($test){
-                    "User: \\$server\$($_.name)" | out-default
-                } else {
-                    add-printer -connectionName "\\$server\$($_.name)"
+        write-Information ("`tserver: " + $server)
+        foreach($property in $keys){
+            $psitem.($property) |
+            where name -eq $PSBoundParameters.($property) |
+            foreach {
+                write-Information ("`tFound: " + $psitem.name)
+                $psitem.share | foreach {
+                    $desiredPrinter += "\\$server\$($_.name)"
                 }
             }
         }
     }
+    end{
+        write-output $desiredPrinter
+    }
+}
+function ApplyPrinter{
+    Param(
+        [string[]]$expected
+    )
+    write-Information ("current printers: ")
+    $list = printerList
+    $expected |
+        where {$_ -notin $list.sharename} |
+        foreach {
+            "Attampt to add: " + $psitem
+            if(-not $test){
+                add-printer -connectionName $psitem
+            }
+        }
 }
 
-"Total: $($setup.Milliseconds + $apply.Milliseconds), Setup: $($setup.Milliseconds), Apply: $($apply.Milliseconds), Username: $($user), Existing Printers: `"$existingPrinters`", New printers: `"$((get-printer | where type -eq 'connection' | select -ExpandProperty name ) -join ', ')`"" |
-    Out-File -append -FilePath "\\bhs-app01\Deployment\printer\log\$Computer.log"
+"Search for room: " + $room
+"List exisitng printers:"
+printerList
+"list expected printers:"
+$filtered = $map.server | filterPrinter -room:$room -Computer:$Computer -User:$User
+write-output $filtered
+
+"Apply Printers -"
+ApplyPrinter -expected $filtered
+
+Stop-transcript
