@@ -19,7 +19,7 @@ function DuplicateFile{
 }
 
 # backup old image
-$f = Get-Item $filename -ErrorAction SilentlyContinue
+$f = Get-Item (join-path $psscriptroot $filename) -ErrorAction SilentlyContinue
 if($f){
     DuplicateFile $f
 }
@@ -28,4 +28,4 @@ if($f){
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::TLS12
 
 $wc = New-Object System.Net.WebClient
-$wc.DownloadFile($url, (join-path $psscriptroot $filename ) )
+$wc.DownloadFile($url, (join-path $psscriptroot $filename) )
