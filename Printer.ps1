@@ -1,3 +1,4 @@
+[cmdletBinding()]
 Param(
     # Overwrite Computer name, room is derived from the first 3 letters.
     [string]
@@ -17,17 +18,24 @@ if($computer.length -ge 3){
 } else {
     $room = ''
 }
-$map = Get-Content -Raw -Path "\\bhs-app01\Deployment\printer\valid-print-map" |
+
+$MapPath = "placeholder"
+
+$map = Get-Content -Raw -Path $MapPath |
     convertfrom-json
-$logpath = "\\bhs-app01\Deployment\printer\log\$Computer.log"
+$logpath = "placeholder\log\$Computer.log"
 Start-Transcript -path $logpath -append
 "Time: " + (get-date).datetime
 
-function printerList{
-    get-printer | where type -eq 'connection' | foreach {
-        "\\{0}\{1}" -f $_.computername, $_.ShareName
-    } | write-output
-}
+Write-information @"
+`t Parameters called as;
+`t Map path : $MapPath
+`t Computer : $computer
+`t User     : $user
+`t Testing  : $test
+"@
+
+
 function filterPrinter{
     [cmdletBinding()]
     Param(
@@ -37,53 +45,62 @@ function filterPrinter{
         [string]$Computer,
         [string]$User
     )
-    begin{
-        $desiredPrinter = @()
-    }
     Process{
         $keys = $printserver | gm -MemberType noteproperty | select -ExpandProperty name | where {$_ -ne 'Name'}
         # TODO: filter for computername and user
         $server = $_.name
-        write-Information ("`tserver: " + $server)
         foreach($property in $keys){
+            write-information ("[filterPrinter] Lookup by {0}" -f $property)
             $psitem.($property) |
             where name -eq $PSBoundParameters.($property) |
             foreach {
-                write-Information ("`tFound: " + $psitem.name)
-                $psitem.share | foreach {
-                    $desiredPrinter += "\\$server\$($_.name)"
+                write-information ("[filterPrinter] Matched {0} as {1}" -f $property, $psitem.name)
+                foreach ($printer in $psitem.share){
+                    $printer | add-member -type noteproperty -name 'UNCPath' -value "\\$server\$($printer.name)"
+                    write-information (
+                        "[filterPrinter] Return printer named: {0}, share {2} and set as default: {1}" -f
+                        $printer.name,
+                        ($printer.default -or $false),
+                        $printer.UNCPath
+                    )
+                    write-output $printer
                 }
             }
         }
     }
-    end{
-        write-output $desiredPrinter
-    }
 }
+
 function ApplyPrinter{
     Param(
-        [string[]]$expected
+        [parameter(valuefrompipeline,mandatory)]
+        $printer
     )
-    write-Information ("current printers: ")
-    $list = printerList
-    $expected |
-        where {$_ -notin $list.sharename} |
-        foreach {
-            "Attampt to add: " + $psitem
+    Process{
+        write-information ("[ApplyPrinter] Add Printer Connection: {0}" -f $printer.uncpath)
+        if(-not $test){
+            $Network.AddWindowsPrinterConnection($printer.UNCPath)
+        }
+        if($printer.default){
+            write-information ("[ApplyPrinter] Set as Default printer {0}" -f $printer.uncpath)
             if(-not $test){
-                add-printer -connectionName $psitem
+                $Network.SetDefaultPrinter($printer.UNCPath)
             }
         }
+    }
 }
 
-"Search for room: " + $room
-"List exisitng printers:"
-printerList
-"list expected printers:"
-$filtered = $map.server | filterPrinter -room:$room -Computer:$Computer -User:$User
-write-output $filtered
+$Network = New-Object -ComObject Wscript.Network
 
-"Apply Printers -"
-ApplyPrinter -expected $filtered
+$printers = $map.server |
+    filterPrinter -room:$room -Computer:$Computer -User:$User
 
-Stop-transcript
+try {
+    $printers | ApplyPrinter
+} catch {
+    Write-information "Attempt to add printers a second time."
+    try {
+        $printers | ApplyPrinter
+    } catch {
+        throw $psitem
+    }
+}
