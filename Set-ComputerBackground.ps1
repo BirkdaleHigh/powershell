@@ -25,3 +25,41 @@ $registry = 'HKLM:/SOFTWARE/Microsoft/Windows/CurrentVersion/Authentication/Logo
 
     Remove-Item -Path $background -Force
 }
+
+function Enable-PersonalizationCSP{
+    Param(
+        #Change as per your needs
+        $DesktopPath = "$($env:temp)\Desktop.jpg",
+
+        # Lock screen image path
+        $LockScreenPath = "$($env:temp)\LockScreen.jpg"
+    )
+    $RegKeyPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP"
+
+    $StatusValue = "1"
+
+    IF( -not (Test-Path $RegKeyPath)){
+        New-Item -Path $RegKeyPath -Force | Out-Null
+    }
+
+    New-ItemProperty -Path $RegKeyPath -Name "DesktopImageStatus" -Value $StatusValue -PropertyType DWORD -Force | Out-Null
+    New-ItemProperty -Path $RegKeyPath -Name "LockScreenImageStatus" -Value $StatusValue -PropertyType DWORD -Force | Out-Null
+
+    New-ItemProperty -Path $RegKeyPath -Name "DesktopImagePath" -Value $DesktopPath -PropertyType STRING -Force | Out-Null
+    New-ItemProperty -Path $RegKeyPath -Name "DesktopImageUrl" -Value $DesktopPath -PropertyType STRING -Force | Out-Null
+    New-ItemProperty -Path $RegKeyPath -Name "LockScreenImagePath" -Value $LockScreenPath -PropertyType STRING -Force | Out-Null
+    New-ItemProperty -Path $RegKeyPath -Name "LockScreenImageUrl" -Value $LockScreenPath -PropertyType STRING -Force | Out-Null
+}
+
+New-CustomBackground{
+    Param(
+        [string]$Path
+    )
+    . (Join-Path $PSScriptRoot .\Add-Watermark.ps1)
+
+    $item = get-item $Path -ErrorAction Stop
+
+    New-Item -Type Directory -Force "c:\ProgramData\Scripts" -ErrorAction SilentlyContinue > $null
+    Add-Watermark -source $item.FullName -destination "c:\ProgramData\Scripts\"
+    Add-Watermark -source $item.FullName -destination "c:\ProgramData\Scripts\" -GreyScale
+}
