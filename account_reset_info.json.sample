@@ -1,0 +1,12 @@
+[
+    {
+        "EmailAddress":  "account1@example.com",
+        "Username":  "account1",
+        "Password":  "random_password"
+    },
+    {
+        "EmailAddress":  "account2@example.com",
+        "Username":  "account2",
+        "Password":  "random_password"
+    }
+]
